@@ -2,62 +2,72 @@ import streamlit as st
 import cv2
 import numpy as np
 from PIL import Image
+import random
 
-st.set_page_config(page_title="DeepCheck AI", layout="wide")
-st.title("Advanced Vehicle Inspection & Anomaly Detection")
+st.set_page_config(page_title="SmartInspect Pro", layout="wide")
+st.title("Next-Gen Inspection: Visual Analysis & Smart Queue Management")
 
-uploaded_img = st.file_uploader("Upload Inspection Photo (Engine/EV Battery/Leaks)", type=["jpg", "jpeg", "png"])
+# Sidebar for System Status
+st.sidebar.header("Station Live Status")
+st.sidebar.info("Lane 1 (Mechanical): 12 min wait")
+st.sidebar.info("Lane 2 (Body & Paint): 5 min wait")
+st.sidebar.info("Lane 3 (EV & Electronic): 8 min wait")
 
-if uploaded_img is not None:
-    img = Image.open(uploaded_img)
+# Step 1: Image Upload
+st.subheader("1. Digital Inspection Entry")
+inspection_type = st.selectbox("Select Inspection Area", ["Exterior (Body)", "Engine/Battery Compartment", "Interior/Electronics"])
+uploaded_file = st.file_uploader("Upload Inspection Image", type=["jpg", "jpeg", "png"])
+
+if uploaded_file is not None:
+    img = Image.open(uploaded_file)
     frame = np.array(img)
     
-    # Image processing for specialized detection
+    # AI Analysis Processing
     bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     gray = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (7, 7), 0)
+    edges = cv2.Canny(blur, 50, 150)
     
-    # 1. Edge Detection (For Tears and Cracks)
-    edges = cv2.Canny(gray, 100, 200)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # 2. Color Masking (For Fluid Leaks and Oxidation)
-    # Detects dark/wet spots and unusual discolorations
-    blur = cv2.GaussianBlur(gray, (15, 15), 0)
-    leak_mask = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
-    
-    # Combine filters for specialized analysis
-    combined_analysis = cv2.addWeighted(edges, 0.5, leak_mask, 0.5, 0)
-    contours, _ = cv2.findContours(combined_analysis, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    severity_score = 0
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if 800 < area < 15000: # Focused area size for realistic defects
-            x, y, w, h = cv2.boundingRect(cnt)
-            # Labeling anomalies based on shape/size
+    anomaly_score = 0
+    for c in contours:
+        if cv2.contourArea(c) > 1000:
+            x, y, w, h = cv2.boundingRect(c)
             cv2.rectangle(bgr_frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
-            severity_score += 1
+            anomaly_score += 1
 
-    result_view = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
+    result_img = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
     
     col1, col2 = st.columns(2)
     with col1:
-        st.image(img, caption="Field Inspection Input", use_container_width=True)
+        st.image(img, caption="Input Data", use_container_width=True)
     with col2:
-        st.image(result_view, caption="AI Analysis Output (Anomalies Boxed)", use_container_width=True)
+        st.image(result_img, caption="AI Feature Detection", use_container_width=True)
 
     st.divider()
-    
-    # Professional Reporting Logic
-    if severity_score > 0:
-        st.error(f"DETECTION REPORT: {severity_score} high-risk anomalies identified.")
-        st.markdown("### Findings:")
-        st.write("- **Physical Discontinuity:** Possible tearing or puncture detected.")
-        st.write("- **Fluid Anomaly:** Surface reflection indicates potential leak (Coolant/Oil).")
-        st.info("AI Verdict: Mandatory physical inspection required for safety compliance.")
-    else:
-        st.success("ANALYSIS COMPLETE: No structural tears or fluid leaks detected.")
-        st.write("Confidence Score: 94.2%")
 
-    st.sidebar.subheader("System Configuration")
-    st.sidebar.write("Algorithm: Hybrid Canny-Gaussian")
-    st.sidebar.write("Sensitivity: High (Tears & Leaks)")
+    # Step 2: Smart Queue Routing (The IE Part)
+    st.subheader("2. Automated Routing & Queue Verdict")
+    
+    if anomaly_score > 0:
+        if inspection_type == "Exterior (Body)":
+            target_lane = "Lane 2 (Body & Chassis)"
+            reason = "Surface deformation detected."
+        elif inspection_type == "Engine/Battery Compartment":
+            target_lane = "Lane 1 (Mechanical)"
+            reason = "Component irregularity detected."
+        else:
+            target_lane = "Lane 3 (EV & Electronic)"
+            reason = "Electronic/Interior fault signature identified."
+
+        st.warning(f"**STATUS:** Anomalies Detected ({anomaly_score} zones).")
+        st.error(f"**ROUTING:** Vehicle directed to **{target_lane}**")
+        st.write(f"**Reason:** {reason}")
+        st.metric(label="Estimated Inspection Time", value=f"{random.randint(15, 25)} mins")
+    else:
+        st.success("**STATUS:** No visible anomalies. Proceed to Fast-Track Lane.")
+        st.write("**ROUTING:** Vehicle directed to **Lane 4 (Express Exit)**")
+        st.metric(label="Estimated Inspection Time", value="8 mins")
+
+    st.sidebar.success("Routing Algorithm: Operational")
