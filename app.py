@@ -3,28 +3,46 @@ import cv2
 import numpy as np
 from PIL import Image
 import plotly.express as px
-import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="SmartInspect Analytics", layout="wide")
-st.title("Advanced Inspection & Lane Management System")
+st.set_page_config(page_title="Smart Gate Inspection", layout="wide")
 
-# 1. Sidebar: Hourly Intensity Chart (Dynamic to current time)
+# --- HEADER SECTION ---
+st.title("Smart Gate: Automated Vehicle Inspection & Queue Management")
+
+# --- STEP 1: VEHICLE CLASSIFICATION ---
+st.subheader("1. Vehicle & Gate Selection")
+col_info1, col_info2, col_info3 = st.columns(3)
+with col_info1:
+    vehicle_type = st.selectbox("Vehicle Classification", ["Passenger Car", "Electric Vehicle (EV)", "Heavy Truck / Logistics"])
+with col_info2:
+    gate_selection = st.selectbox("Assign to Gate", ["Gate A (Fast Track)", "Gate B (Standard)", "Gate C (Technical)"])
+with col_info3:
+    st.metric("Daily Throughput", "142 Vehicles", "+12%")
+
+# --- GATE STATUS INDICATORS ---
+st.write("### Live Gate Status")
+gate_col1, gate_col2, gate_col3, gate_col4 = st.columns(4)
+gate_col1.success("Gate 1: OPEN")
+gate_col2.success("Gate 2: OPEN")
+gate_col3.warning("Gate 3: BUSY (8m)")
+gate_col4.error("Gate 4: CLOSED")
+
+st.divider()
+
+# --- STEP 2: IMAGE ANALYSIS ---
+st.subheader("2. Visual Structural Analysis")
+
+# Sidebar: Intensity Analytics
 current_hour = datetime.now().hour
 hours = [(current_hour + i) % 24 for i in range(-4, 5)]
-occupancy_data = [15, 25, 45, 85, 95, 75, 40, 20, 10] 
+occupancy = [20, 35, 60, 90, 85, 70, 45, 25, 10]
+st.sidebar.header("Station Load Analytics")
+fig_side = px.line(x=hours, y=occupancy, labels={'x': 'Hour', 'y': 'Load %'}, title="Hourly Intensity")
+fig_side.update_traces(line_color='red')
+st.sidebar.plotly_chart(fig_side, use_container_width=True)
 
-st.sidebar.header("Station Real-Time Status")
-st.sidebar.write(f"System Sync: {datetime.now().strftime('%H:%M')}")
-st.sidebar.subheader("Hourly Traffic Density")
-fig_time = px.line(x=hours, y=occupancy_data, labels={'x': 'Hour', 'y': 'Station Load %'})
-fig_time.update_traces(line_color='#FF4B4B', mode='lines+markers')
-st.sidebar.plotly_chart(fig_time, use_container_width=True)
-
-# 2. Main Diagnostic Section
-st.subheader("1. Digital Triage & Visual Analysis")
-inspection_domain = st.selectbox("Assign Inspection Domain", ["Exterior (Body)", "Engine/Battery Compartment", "Interior/Electronics"])
-uploaded_file = st.file_uploader("Upload Inspection Data", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Upload Inspection Scan", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     img = Image.open(uploaded_file)
@@ -32,77 +50,64 @@ if uploaded_file is not None:
     bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     gray = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2GRAY)
     
-    # High Precision Detection Logic
-    blur = cv2.GaussianBlur(gray, (9, 9), 0)
-    edges = cv2.Canny(blur, 35, 110)
+    # High-Precision Algorithm
+    blur = cv2.GaussianBlur(gray, (7, 7), 0)
+    edges = cv2.Canny(blur, 40, 110)
     kernel = np.ones((3,3), np.uint8)
-    enhanced_edges = cv2.dilate(edges, kernel, iterations=1)
+    dilated = cv2.dilate(edges, kernel, iterations=1)
     
-    contours, _ = cv2.findContours(enhanced_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    total_damage_area = 0
-    severity_counts = {"Minor": 0, "Moderate": 0, "Critical": 0}
+    total_area = 0
+    severity_map = {"Minor": 0, "Moderate": 0, "Critical": 0}
     
     for c in contours:
         area = cv2.contourArea(c)
-        if 400 < area < 60000:
+        if 500 < area < 50000:
             x, y, w, h = cv2.boundingRect(c)
-            total_damage_area += area
-            
-            # Severity Logic & Bounding Boxes
+            total_area += area
             if area < 5000:
                 color, label = (0, 255, 0), "Minor"
-                severity_counts["Minor"] += 1
+                severity_map["Minor"] += 1
             elif area < 20000:
                 color, label = (255, 0, 0), "Moderate"
-                severity_counts["Moderate"] += 1
+                severity_map["Moderate"] += 1
             else:
                 color, label = (0, 0, 255), "Critical"
-                severity_counts["Critical"] += 1
-                
+                severity_map["Critical"] += 1
             cv2.rectangle(bgr_frame, (x, y), (x + w, y + h), color, 3)
 
-    result_img = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
+    processed_img = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
+
+    # --- RESULTS & PIE CHART ---
+    res_col1, res_col2 = st.columns([1, 1])
     
-    # 3. Decision Support & Analytics Dashboard
+    with res_col1:
+        st.image(processed_img, caption="AI Detection Mapping", use_container_width=True)
+        
+    with res_col2:
+        st.write("### Anomaly Distribution")
+        fig_pie = px.pie(values=list(severity_map.values()), 
+                         names=list(severity_map.keys()),
+                         color=list(severity_map.keys()),
+                         color_discrete_map={'Minor':'green', 'Moderate':'blue', 'Critical':'red'},
+                         hole=0.4)
+        st.plotly_chart(fig_pie, use_container_width=True)
+
     st.divider()
-    st.subheader("2. Diagnostic Result & Queue Assignment")
-    
-    # Metrics and Pie Chart
-    col_metrics, col_chart = st.columns([1, 1])
-    
-    if total_damage_area > 0:
-        if total_damage_area < 8000:
-            f_sev, f_col, wait_add = "MINOR", "green", 15
-        elif total_damage_area < 30000:
-            f_sev, f_col, wait_add = "MODERATE", "blue", 35
+
+    # --- STEP 3: QUEUE VERDICT ---
+    st.subheader("3. Final Queue Verdict")
+    if total_area > 0:
+        if total_area < 8000:
+            sev_level, wait = "MINOR", 12
+        elif total_area < 25000:
+            sev_level, wait = "MODERATE", 25
         else:
-            f_sev, f_col, wait_add = "CRITICAL", "red", 60
-
-        with col_metrics:
-            st.markdown(f"### Verdict: :{f_col}[{f_sev} DETECTED]")
-            target_lane = "Lane 2 (Body)" if inspection_domain == "Exterior (Body)" else "Lane 1 (Mechanical)"
-            st.write(f"**Target Station:** {target_lane}")
-            st.metric("Est. Additional Process Time", f"{wait_add} mins")
-            st.info("The vehicle has been prioritized in the queue based on AI structural assessment.")
-
-        with col_chart:
-            df_pie = pd.DataFrame(list(severity_counts.items()), columns=['Severity', 'Count'])
-            fig_pie = px.pie(df_pie, values='Count', names='Severity', 
-                             color='Severity',
-                             color_discrete_map={'Minor':'green', 'Moderate':'blue', 'Critical':'red'},
-                             hole=0.4, title="Anomaly Distribution")
-            fig_pie.update_layout(height=300)
-            st.plotly_chart(fig_pie, use_container_width=True)
+            sev_level, wait = "CRITICAL", 50
             
-        # Analysis Output Display at the Bottom
-        st.divider()
-        st.subheader("3. Precise Visual Mapping")
-        c_raw, c_proc = st.columns(2)
-        c_raw.image(img, caption="Original Input", use_container_width=True)
-        c_proc.image(result_img, caption="AI Detected Anomalies", use_container_width=True)
-            
+        st.error(f"**ISSUE DETECTED:** {sev_level} structural anomaly found on {vehicle_type}.")
+        st.info(f"**SYSTEM ACTION:** Vehicle routed to {gate_selection}. Estimated processing time: **{wait} minutes**.")
     else:
-        st.success("### [NO ANOMALIES DETECTED]")
-        st.write("Directing vehicle to Lane 4 (Express Exit).")
-        st.metric("Total Estimated Wait", "8 mins")
+        st.success(f"**CLEAN SCAN:** No issues found for {vehicle_type}. Proceed through Gate 1.")
+        st.metric("Wait Time", "4 mins")
