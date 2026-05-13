@@ -134,4 +134,8 @@ if uploaded_file is not None:
             st.session_state.critical_count += 1
         
         st.session_state.history.append({
-            'hour': datetime.
+            'hour': datetime.now().hour,
+            'sev': current_sev
+        })
+        st.toast(f"Logged: {current_sev}", icon="✅")
+        st.rerun()
