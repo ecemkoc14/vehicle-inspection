@@ -10,7 +10,7 @@ st.set_page_config(page_title="Smart Inspection Dashboard", layout="wide")
 
 # --- SESSION STATE (Veri Deposu) ---
 if 'history' not in st.session_state:
-    st.session_state.history = [] # Tüm geçmiş sonuçlar burada: {'hour': 12, 'sev': 'Critical'}
+    st.session_state.history = [] 
 if 'total_count' not in st.session_state:
     st.session_state.total_count = 0
 if 'critical_count' not in st.session_state:
@@ -39,14 +39,12 @@ with col_graph1:
     
     fig_line = px.line(x=all_hours, y=counts, markers=True, labels={'x':'Hour', 'y':'Vehicles'})
     fig_line.update_traces(line_color='#FF4B4B')
-    # Mevcut saate odakla
     cur_h = datetime.now().hour
     fig_line.update_xaxes(range=[max(0, cur_h-4), min(23, cur_h+4)])
     st.plotly_chart(fig_line, use_container_width=True)
 
 with col_graph2:
     st.subheader("Cumulative Severity Distribution")
-    # Geçmiş verilerden pie chart oluştur
     if st.session_state.history:
         df_hist = pd.DataFrame(st.session_state.history)
         pie_data = df_hist['sev'].value_counts().reset_index()
@@ -56,7 +54,7 @@ with col_graph2:
                          color_discrete_map={'Minor':'green', 'Moderate':'blue', 'Critical':'red'})
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
-        st.info("No data yet. Upload and update to see distribution.")
+        st.info("No logs yet. Upload and update to see the pie chart.")
 
 st.divider()
 
@@ -83,49 +81,57 @@ if uploaded_file is not None:
     bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
     
-    # Sensivity Adjustments
-    blur_val = (15, 15) if i_focus == "Engine Compartment" else (7, 7)
+    # --- DİNAMİK HASSASİYET AYARLARI ---
+    if i_focus == "Engine Compartment":
+        blur_val = (15, 15)
+        canny_low, canny_high = 50, 150
+        min_area = 1000
+        mod_limit = 45000
+        crit_limit = 80000 # Motor içi karmaşıklığı için çok yüksek eşik
+    else: # Exterior (Body)
+        blur_val = (7, 7)
+        canny_low, canny_high = 40, 120
+        min_area = 800
+        mod_limit = 15000 # Küçük göçükler buraya kadar Minor kalır
+        crit_limit = 50000 # Sadece büyük dağılmalar Critical olur
+
     blur = cv2.GaussianBlur(gray, blur_val, 0)
-    edges = cv2.Canny(blur, 40, 130)
+    edges = cv2.Canny(blur, canny_low, canny_high)
     kernel = np.ones((5,5), np.uint8)
     dilated = cv2.dilate(edges, kernel, iterations=2)
     
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # Tek bir araç için baskın hasarı bulma
     max_area = 0
     for c in contours:
         area = cv2.contourArea(c)
-        if area > 500:
+        if area > min_area:
             if area > max_area: max_area = area
-            # Görselleştirme (Hepsi çizilsin ama sadece en büyüğü sonucu belirlesin)
             x, y, w, h = cv2.boundingRect(c)
-            cv2.rectangle(bgr, (x, y), (x+w, y+h), (255, 255, 255), 2)
+            # Çizim Renkleri (Görsel geri bildirim için)
+            if area < mod_limit: d_color = (0, 255, 0) # Green
+            elif area < crit_limit: d_color = (255, 0, 0) # Blue
+            else: d_color = (0, 0, 255) # Red
+            cv2.rectangle(bgr, (x, y), (x+w, y+h), d_color, 3)
 
-    # Karar Mekanizması (Tek Araç = Tek Değer)
-    crit_limit = 45000 if i_focus == "Engine Compartment" else 25000
+    # Karar Mekanizması
     if max_area == 0: current_sev = "None"
-    elif max_area < 8000: current_sev = "Minor"
+    elif max_area < mod_limit: current_sev = "Minor"
     elif max_area < crit_limit: current_sev = "Moderate"
     else: current_sev = "Critical"
 
-    # Sonucu ekranda göster
     res_v = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
     with input_col2:
         st.image(res_v, use_container_width=True)
         if current_sev != "None":
-            st.markdown(f"### AI Verdict: **{current_sev}**")
+            # Sonucu renklendirerek yazdır
+            color_map = {"Minor": "green", "Moderate": "blue", "Critical": "red"}
+            st.markdown(f"### AI Verdict: :{color_map[current_sev]}[{current_sev}]")
 
-    # --- UPDATE LOGIC ---
     if update_clicked and current_sev != "None":
         st.session_state.total_count += 1
         if current_sev == "Critical":
             st.session_state.critical_count += 1
         
-        # Geçmişe ekle (Pie chart bunu kullanacak)
         st.session_state.history.append({
-            'hour': datetime.now().hour,
-            'sev': current_sev
-        })
-        st.toast(f"Logged as {current_sev}!", icon="📍")
-        st.rerun()
+            'hour': datetime.
