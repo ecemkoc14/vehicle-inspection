@@ -3,46 +3,59 @@ import cv2
 import numpy as np
 from PIL import Image
 import plotly.express as px
+import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Smart Gate Inspection", layout="wide")
+st.set_page_config(page_title="Inspection Dashboard", layout="wide")
 
-# --- HEADER SECTION ---
-st.title("Smart Gate: Automated Vehicle Inspection & Queue Management")
+# --- 1. TOP KPI ROW (En Üstteki İstatistik Kapıları) ---
+st.title("Vehicle Inspection & Network Analytics")
 
-# --- STEP 1: VEHICLE CLASSIFICATION ---
-st.subheader("1. Vehicle & Gate Selection")
-col_info1, col_info2, col_info3 = st.columns(3)
-with col_info1:
-    vehicle_type = st.selectbox("Vehicle Classification", ["Passenger Car", "Electric Vehicle (EV)", "Heavy Truck / Logistics"])
-with col_info2:
-    gate_selection = st.selectbox("Assign to Gate", ["Gate A (Fast Track)", "Gate B (Standard)", "Gate C (Technical)"])
-with col_info3:
-    st.metric("Daily Throughput", "142 Vehicles", "+12%")
+# Sayıların her yüklemede artması için session_state kullanıyoruz
+if 'total_inspected' not in st.session_state:
+    st.session_state.total_inspected = 142
+if 'critical_cases' not in st.session_state:
+    st.session_state.critical_cases = 12
 
-# --- GATE STATUS INDICATORS ---
-st.write("### Live Gate Status")
-gate_col1, gate_col2, gate_col3, gate_col4 = st.columns(4)
-gate_col1.success("Gate 1: OPEN")
-gate_col2.success("Gate 2: OPEN")
-gate_col3.warning("Gate 3: BUSY (8m)")
-gate_col4.error("Gate 4: CLOSED")
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+kpi1.metric("Total Inspected", st.session_state.total_inspected, "+1")
+kpi2.metric("Critical Cases", st.session_state.critical_cases, "High Priority")
+kpi3.metric("Avg. Cycle Time", "18.5 min", "-2.1m")
+kpi4.metric("System Efficiency", "94%", "+1.2%")
 
 st.divider()
 
-# --- STEP 2: IMAGE ANALYSIS ---
-st.subheader("2. Visual Structural Analysis")
+# --- 2. ANALYTICS ROW (Orta Bölüm: Grafikler Yan Yana) ---
+col_graph1, col_graph2 = st.columns(2)
 
-# Sidebar: Intensity Analytics
-current_hour = datetime.now().hour
-hours = [(current_hour + i) % 24 for i in range(-4, 5)]
-occupancy = [20, 35, 60, 90, 85, 70, 45, 25, 10]
-st.sidebar.header("Station Load Analytics")
-fig_side = px.line(x=hours, y=occupancy, labels={'x': 'Hour', 'y': 'Load %'}, title="Hourly Intensity")
-fig_side.update_traces(line_color='red')
-st.sidebar.plotly_chart(fig_side, use_container_width=True)
+with col_graph1:
+    st.subheader("Hourly Traffic Density")
+    # SAAT DÜZELTMESİ: Şu anki saati merkez alır (11:00 - 12:00 arası için dinamik)
+    current_hour = datetime.now().hour
+    hours = [(current_hour + i) % 24 for i in range(-4, 5)]
+    # Yoğunluk grafiği şu anki saatinde (merkezde) zirve yapar
+    occupancy = [20, 35, 55, 85, 98, 75, 45, 25, 15] 
+    
+    fig_line = px.line(x=hours, y=occupancy, labels={'x': 'Hour (Live Sync)', 'y': 'Station Load %'})
+    fig_line.update_traces(line_color='#FF4B4B', mode='lines+markers')
+    st.plotly_chart(fig_line, use_container_width=True)
 
-uploaded_file = st.file_uploader("Upload Inspection Scan", type=["jpg", "jpeg", "png"])
+with col_graph2:
+    st.subheader("Anomaly Severity Distribution")
+    # Pie Chart için placeholder (aşağıdaki analizden sonra dolacak)
+    severity_placeholder = st.empty()
+
+st.divider()
+
+# --- 3. INPUT & ANALYSIS SECTION (En Alt Bölüm) ---
+st.subheader("3. Data Entry & AI Scan")
+input_col1, input_col2 = st.columns(2)
+
+with input_col1:
+    # Araç ve Bölge Seçimi
+    v_category = st.radio("Vehicle Category", ["Passenger Car", "Electric Vehicle (EV)", "Truck / Logistics"], horizontal=True)
+    i_focus = st.selectbox("Inspection Focus", ["Exterior (Body)", "Engine Compartment", "Underbody / Battery Case"])
+    uploaded_file = st.file_uploader("Upload Inspection Image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
     img = Image.open(uploaded_file)
@@ -50,8 +63,8 @@ if uploaded_file is not None:
     bgr_frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     gray = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2GRAY)
     
-    # High-Precision Algorithm
-    blur = cv2.GaussianBlur(gray, (7, 7), 0)
+    # Hassas Analiz Algoritması
+    blur = cv2.GaussianBlur(gray, (9, 9), 0)
     edges = cv2.Canny(blur, 40, 110)
     kernel = np.ones((3,3), np.uint8)
     dilated = cv2.dilate(edges, kernel, iterations=1)
@@ -59,55 +72,48 @@ if uploaded_file is not None:
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     total_area = 0
-    severity_map = {"Minor": 0, "Moderate": 0, "Critical": 0}
+    sev_counts = {"Minor": 0, "Moderate": 0, "Critical": 0}
     
     for c in contours:
         area = cv2.contourArea(c)
-        if 500 < area < 50000:
+        if 400 < area < 60000:
             x, y, w, h = cv2.boundingRect(c)
             total_area += area
+            
+            # RENK DÜZELTMESİ (OpenCV BGR formatı)
             if area < 5000:
-                color, label = (0, 255, 0), "Minor"
-                severity_map["Minor"] += 1
+                color, label = (0, 255, 0), "Minor" # Yeşil
+                sev_counts["Minor"] += 1
             elif area < 20000:
-                color, label = (255, 0, 0), "Moderate"
-                severity_map["Moderate"] += 1
+                color, label = (255, 0, 0), "Moderate" # Mavi (BGR'de 255,0,0 mavidir)
+                sev_counts["Moderate"] += 1
             else:
-                color, label = (0, 0, 255), "Critical"
-                severity_map["Critical"] += 1
+                color, label = (0, 0, 255), "Critical" # Kırmızı
+                sev_counts["Critical"] += 1
+                
             cv2.rectangle(bgr_frame, (x, y), (x + w, y + h), color, 3)
 
-    processed_img = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
-
-    # --- RESULTS & PIE CHART ---
-    res_col1, res_col2 = st.columns([1, 1])
+    # Verileri Güncelle
+    st.session_state.total_inspected += 1
     
-    with res_col1:
-        st.image(processed_img, caption="AI Detection Mapping", use_container_width=True)
+    # PIE CHART RENK DÜZELTMESİ
+    df_pie = pd.DataFrame(list(sev_counts.items()), columns=['Severity', 'Count'])
+    fig_pie = px.pie(df_pie, values='Count', names='Severity', 
+                     color='Severity',
+                     color_discrete_map={'Minor':'green', 'Moderate':'blue', 'Critical':'red'},
+                     hole=0.4)
+    severity_placeholder.plotly_chart(fig_pie, use_container_width=True)
+
+    # Analiz Görüntüsünü İşle ve Göster
+    res_img = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
+    
+    with input_col2:
+        st.image(res_img, caption="AI Structural Diagnostics", use_container_width=True)
         
-    with res_col2:
-        st.write("### Anomaly Distribution")
-        fig_pie = px.pie(values=list(severity_map.values()), 
-                         names=list(severity_map.keys()),
-                         color=list(severity_map.keys()),
-                         color_discrete_map={'Minor':'green', 'Moderate':'blue', 'Critical':'red'},
-                         hole=0.4)
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    st.divider()
-
-    # --- STEP 3: QUEUE VERDICT ---
-    st.subheader("3. Final Queue Verdict")
-    if total_area > 0:
-        if total_area < 8000:
-            sev_level, wait = "MINOR", 12
-        elif total_area < 25000:
-            sev_level, wait = "MODERATE", 25
+        if total_area > 20000:
+            st.error(f"CRITICAL DAMAGE DETECTED on {v_category}")
+            st.session_state.critical_cases += 1
+        elif total_area > 0:
+            st.warning(f"Moderate/Minor anomalies detected. Reviewing {i_focus}...")
         else:
-            sev_level, wait = "CRITICAL", 50
-            
-        st.error(f"**ISSUE DETECTED:** {sev_level} structural anomaly found on {vehicle_type}.")
-        st.info(f"**SYSTEM ACTION:** Vehicle routed to {gate_selection}. Estimated processing time: **{wait} minutes**.")
-    else:
-        st.success(f"**CLEAN SCAN:** No issues found for {vehicle_type}. Proceed through Gate 1.")
-        st.metric("Wait Time", "4 mins")
+            st.success(f"No significant issues found for this {v_category}.")
