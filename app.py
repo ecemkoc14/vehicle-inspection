@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import datetime
 import time
+import random
 
 # --- SESSION STATE: VERİLERİ SAKLAMA ---
 if 'history' not in st.session_state:
